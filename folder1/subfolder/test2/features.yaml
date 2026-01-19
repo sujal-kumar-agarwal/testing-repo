@@ -2,7 +2,6 @@ features:
   authentication:
     enabled: true
     methods:
-      - oauth2
       - jwt
       - api_key
   notifications:
