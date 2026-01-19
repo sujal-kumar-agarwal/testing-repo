@@ -1,0 +1,16 @@
+features:
+  authentication:
+    enabled: true
+    methods:
+      - oauth2
+      - jwt
+      - api_key
+  notifications:
+    enabled: true
+    channels:
+      - email
+      - sms
+      - push
+  analytics:
+    enabled: false
+    provider: google_analytics

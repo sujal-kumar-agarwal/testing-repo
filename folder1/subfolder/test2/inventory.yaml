@@ -1,0 +1,18 @@
+inventory:
+  items:
+    - sku: PROD-001
+      name: Laptop
+      quantity: 50
+      price: 999.99
+    - sku: PROD-002
+      name: Monitor
+      quantity: 75
+      price: 299.99
+    - sku: PROD-003
+      name: Keyboard
+      quantity: 120
+      price: 79.99
+    - sku: PROD-004
+      name: Mouse
+      quantity: 150
+      price: 29.99

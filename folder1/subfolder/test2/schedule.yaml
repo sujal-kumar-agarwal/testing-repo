@@ -1,0 +1,18 @@
+schedule:
+  daily_tasks:
+    - task: backup_database
+      time: "02:00"
+      priority: high
+    - task: send_reports
+      time: "09:00"
+      priority: medium
+    - task: cleanup_logs
+      time: "23:00"
+      priority: low
+  weekly_tasks:
+    - task: system_update
+      day: sunday
+      time: "03:00"
+    - task: performance_review
+      day: friday
+      time: "15:00"
