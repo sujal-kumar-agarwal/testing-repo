@@ -4,6 +4,7 @@ metadata:
   author: Sujal Kumar Agarwal
   description: Sample YAML file containing metadata information
   tags:
+    - coding
     - testing
     - automation
     - configuration
