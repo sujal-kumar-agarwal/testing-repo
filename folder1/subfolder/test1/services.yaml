@@ -1,0 +1,19 @@
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: always
+  api:
+    image: node:16
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+  database:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
