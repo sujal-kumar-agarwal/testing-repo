@@ -2,7 +2,7 @@ name: Application Configuration
 version: 1.0.0
 environment: production
 settings:
-  debug: false
+  debug: true
   timeout: 3
   max_connections: 100
 database:
