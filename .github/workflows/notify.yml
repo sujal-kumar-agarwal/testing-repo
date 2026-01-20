@@ -1,4 +1,4 @@
-name: Send GitHub push details to Teams
+name: Notify Teams on Push
  
 on:
   push:
@@ -10,98 +10,104 @@ jobs:
     runs-on: ubuntu-latest
  
     steps:
-      - name: Send Adaptive Card to Microsoft Teams
-        env:
-          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      - name: Extract push details
+        id: extract
         run: |
-          AUTHOR_NAME="${{ github.event.head_commit.author.name }}"
-          AUTHOR_EMAIL="${{ github.event.head_commit.author.email }}"
-          BRANCH_NAME="${{ github.ref_name }}"
-          REPO_NAME="${{ github.repository }}"
-          COMPARE_URL="${{ github.event.compare }}"
+          AUTHOR_NAME=$(jq -r '.pusher.name' "$GITHUB_EVENT_PATH")
+          AUTHOR_EMAIL=$(jq -r '.pusher.email' "$GITHUB_EVENT_PATH")
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
  
-          # Aggregate commit messages across all commits
-          COMMIT_MESSAGES=$(jq -r '[.commits[].message] | .[]' <<< '${{ toJson(github.event) }}')
+          COMMIT_MESSAGES=$(jq -r '.commits[].message' "$GITHUB_EVENT_PATH")
  
-          # Aggregate files across all commits
-          ADDED_FILES=$(jq -r '[.commits[].added[]] | unique | .[]?' <<< '${{ toJson(github.event) }}')
-          MODIFIED_FILES=$(jq -r '[.commits[].modified[]] | unique | .[]?' <<< '${{ toJson(github.event) }}')
-          REMOVED_FILES=$(jq -r '[.commits[].removed[]] | unique | .[]?' <<< '${{ toJson(github.event) }}')
+          FILES_CHANGED=$(jq -r '
+            .commits[]
+            | (.added // [] + .modified // [] + .removed // [])
+            | .[]
+          ' "$GITHUB_EVENT_PATH" | sort -u)
  
-          curl -X POST "$TEAMS_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"type\": \"message\",
-              \"attachments\": [
-                {
-                  \"contentType\": \"application/vnd.microsoft.card.adaptive\",
-                  \"content\": {
-                    \"\$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",
-                    \"type\": \"AdaptiveCard\",
-                    \"version\": \"1.4\",
-                    \"body\": [
-                      {
-                        \"type\": \"FactSet\",
-                        \"facts\": [
-                          { \"title\": \"Repository\", \"value\": \"${REPO_NAME}\" },
-                          { \"title\": \"Branch\", \"value\": \"${BRANCH_NAME}\" },
-                          { \"title\": \"Author\", \"value\": \"${AUTHOR_NAME} (${AUTHOR_EMAIL})\" }
-                        ]
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"Commit messages\",
-                        \"weight\": \"Bolder\",
-                        \"spacing\": \"Medium\"
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"$(printf '%s\n' "$COMMIT_MESSAGES")\",
-                        \"wrap\": true
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"Files added\",
-                        \"weight\": \"Bolder\",
-                        \"spacing\": \"Medium\"
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"$(printf '%s\n' "$ADDED_FILES")\",
-                        \"wrap\": true
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"Files modified\",
-                        \"weight\": \"Bolder\",
-                        \"spacing\": \"Medium\"
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"$(printf '%s\n' "$MODIFIED_FILES")\",
-                        \"wrap\": true
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"Files removed\",
-                        \"weight\": \"Bolder\",
-                        \"spacing\": \"Medium\"
-                      },
-                      {
-                        \"type\": \"TextBlock\",
-                        \"text\": \"$(printf '%s\n' "$REMOVED_FILES")\",
-                        \"wrap\": true
-                      }
-                    ],
-                    \"actions\": [
-                      {
-                        \"type\": \"Action.OpenUrl\",
-                        \"title\": \"View changes\",
-                        \"url\": \"${COMPARE_URL}\"
-                      }
-                    ]
-                  }
+          COMMIT_URL=$(jq -r '.compare' "$GITHUB_EVENT_PATH")
+ 
+          echo "author_name<<EOF" >> $GITHUB_OUTPUT
+          echo "$AUTHOR_NAME" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+ 
+          echo "author_email<<EOF" >> $GITHUB_OUTPUT
+          echo "$AUTHOR_EMAIL" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+ 
+          echo "branch<<EOF" >> $GITHUB_OUTPUT
+          echo "$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+ 
+          echo "commit_messages<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MESSAGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+ 
+          echo "files_changed<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES_CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+ 
+          echo "commit_url=$COMMIT_URL" >> $GITHUB_OUTPUT
+ 
+      - name: Send Adaptive Card to Microsoft Teams
+        run: |
+          jq -n \
+          --arg author "${{ steps.extract.outputs.author_name }}" \
+          --arg email "${{ steps.extract.outputs.author_email }}" \
+          --arg branch "${{ steps.extract.outputs.branch }}" \
+          --arg commits "${{ steps.extract.outputs.commit_messages }}" \
+          --arg files "${{ steps.extract.outputs.files_changed }}" \
+          --arg url "${{ steps.extract.outputs.commit_url }}" \
+          '{
+            type: "message",
+            attachments: [
+              {
+                contentType: "application/vnd.microsoft.card.adaptive",
+                content: {
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  type: "AdaptiveCard",
+                  version: "1.5",
+                  body: [
+                    {
+                      type: "FactSet",
+                      facts: [
+                        { title: "Author", value: $author },
+                        { title: "Email", value: $email },
+                        { title: "Branch", value: $branch }
+                      ]
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "Commit Messages",
+                      weight: "Bolder",
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: $commits,
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "Files Changed",
+                      weight: "Bolder",
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: $files,
+                      wrap: true
+                    }
+                  ],
+                  actions: [
+                    {
+                      type: "Action.OpenUrl",
+                      title: "View Commits",
+                      url: $url
+                    }
+                  ]
                 }
-              ]
-            }"
- 
+              }
+            ]
+          }' | curl -X POST -H "Content-Type: application/json" -d @- \
+          "${{ secrets.TEAMS_WEBHOOK_URL }}"
