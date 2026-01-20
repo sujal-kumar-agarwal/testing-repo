@@ -2,7 +2,6 @@ metadata:
   project: testing-repo
   created_date: 2026-01-19
   author: Sujal Kumar Agarwal
-  description: Sample YAML file containing metadata information
   tags:
     - automation
     - configuration
