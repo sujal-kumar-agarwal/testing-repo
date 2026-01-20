@@ -1,36 +1,110 @@
-name: Notify Teams on Push
+name: Notify Teams with Adaptive Card on Push
  
 on:
   push:
     branches:
-      - '**'   # all branches
+      - '**'
  
 jobs:
   notify:
     runs-on: ubuntu-latest
  
     steps:
-      - name: Send push details to Microsoft Teams
+      - name: Send Adaptive Card to Microsoft Teams
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: |
           AUTHOR_NAME="${{ github.event.head_commit.author.name }}"
           AUTHOR_EMAIL="${{ github.event.head_commit.author.email }}"
           BRANCH_NAME="${{ github.ref_name }}"
+          REPO_NAME="${{ github.repository }}"
           COMMIT_MESSAGE=$(echo "${{ github.event.head_commit.message }}" | sed 's/"/\\"/g')
+          COMMIT_URL="${{ github.event.head_commit.url }}"
  
-          ADDED_FILES=$(printf "%s\n" "${{ join(github.event.head_commit.added, '\n') }}")
-          MODIFIED_FILES=$(printf "%s\n" "${{ join(github.event.head_commit.modified, '\n') }}")
-          REMOVED_FILES=$(printf "%s\n" "${{ join(github.event.head_commit.removed, '\n') }}")
+          ADDED_FILES=$(printf "%s\\n" "${{ join(github.event.head_commit.added, '\n') }}")
+          MODIFIED_FILES=$(printf "%s\\n" "${{ join(github.event.head_commit.modified, '\n') }}")
+          REMOVED_FILES=$(printf "%s\\n" "${{ join(github.event.head_commit.removed, '\n') }}")
  
           curl -X POST "$TEAMS_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{
-              \"text\": \"🚀 *GitHub Push Notification*\\n\\n\
-              **Author:** ${AUTHOR_NAME} (${AUTHOR_EMAIL})\\n\
-              **Branch:** ${BRANCH_NAME}\\n\\n\
-              **Commit Message:**\\n${COMMIT_MESSAGE}\\n\\n\
-              **Files Added:**\\n${ADDED_FILES:-None}\\n\\n\
-              **Files Modified:**\\n${MODIFIED_FILES:-None}\\n\\n\
-              **Files Removed:**\\n${REMOVED_FILES:-None}\"
+              \"type\": \"message\",
+              \"attachments\": [
+                {
+                  \"contentType\": \"application/vnd.microsoft.card.adaptive\",
+                  \"content\": {
+                    \"\$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",
+                    \"type\": \"AdaptiveCard\",
+                    \"version\": \"1.4\",
+                    \"body\": [
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"🚀 GitHub Push Notification\",
+                        \"weight\": \"Bolder\",
+                        \"size\": \"Large\"
+                      },
+                      {
+                        \"type\": \"FactSet\",
+                        \"facts\": [
+                          { \"title\": \"Repository\", \"value\": \"${REPO_NAME}\" },
+                          { \"title\": \"Branch\", \"value\": \"${BRANCH_NAME}\" },
+                          { \"title\": \"Author\", \"value\": \"${AUTHOR_NAME} (${AUTHOR_EMAIL})\" }
+                        ]
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"Commit Message\",
+                        \"weight\": \"Bolder\",
+                        \"spacing\": \"Medium\"
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"${COMMIT_MESSAGE}\",
+                        \"wrap\": true
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"Files Added\",
+                        \"weight\": \"Bolder\",
+                        \"spacing\": \"Medium\"
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"${ADDED_FILES:-None}\",
+                        \"wrap\": true
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"Files Modified\",
+                        \"weight\": \"Bolder\",
+                        \"spacing\": \"Medium\"
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"${MODIFIED_FILES:-None}\",
+                        \"wrap\": true
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"Files Removed\",
+                        \"weight\": \"Bolder\",
+                        \"spacing\": \"Medium\"
+                      },
+                      {
+                        \"type\": \"TextBlock\",
+                        \"text\": \"${REMOVED_FILES:-None}\",
+                        \"wrap\": true
+                      }
+                    ],
+                    \"actions\": [
+                      {
+                        \"type\": \"Action.OpenUrl\",
+                        \"title\": \"View Commit\",
+                        \"url\": \"${COMMIT_URL}\"
+                      }
+                    ]
+                  }
+                }
+              ]
             }"
+ 
