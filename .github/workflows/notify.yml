@@ -3,7 +3,9 @@ name: Push Notification to MS Teams
 on:
   push:
     branches:
-      - '**'
+      - dev
+    paths:
+      - folder1/**
  
 jobs:
   notify-teams:
@@ -15,39 +17,61 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Get changed files
+      - name: Get changed files with status
         id: files
         run: |
-          FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | head -20 | paste -sd "," -)
-          if [ -z "$FILES" ]; then
-            FILES="No files changed"
+          ADDED=$(git diff --name-only --diff-filter=A ${{ github.event.before }} ${{ github.event.after }} | head -10 | paste -sd "," -)
+          MODIFIED=$(git diff --name-only --diff-filter=M ${{ github.event.before }} ${{ github.event.after }} | head -10 | paste -sd "," -)
+          DELETED=$(git diff --name-only --diff-filter=D ${{ github.event.before }} ${{ github.event.after }} | head -10 | paste -sd "," -)
+          
+          [ -z "$ADDED" ] && ADDED="None"
+          [ -z "$MODIFIED" ] && MODIFIED="None"
+          [ -z "$DELETED" ] && DELETED="None"
+          
+          echo "added=$ADDED" >> $GITHUB_OUTPUT
+          echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
+          echo "deleted=$DELETED" >> $GITHUB_OUTPUT
+      
+      - name: Build commit messages
+        id: commits
+        env:
+          COMMITS_JSON: ${{ toJSON(github.event.commits) }}
+        run: |
+          COMMIT_MESSAGES=$(echo "$COMMITS_JSON" | jq -r '.[] | "- " + .message' | head -10)
+          if [ -z "$COMMIT_MESSAGES" ]; then
+            COMMIT_MESSAGES="${{ github.event.head_commit.message }}"
           fi
-          echo "list=$FILES" >> $GITHUB_OUTPUT
+          echo "messages<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MESSAGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       
       - name: Send to Teams
         env:
           WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: |
-          curl -H "Content-Type: application/json" -d '{
-            "@type": "MessageCard",
-            "@context": "http://schema.org/extensions",
-            "themeColor": "0076D7",
-            "summary": "Push to ${{ github.repository }}",
-            "sections": [{
-              "activityTitle": "Push to ${{ github.repository }}",
-              "activitySubtitle": "${{ github.event.pusher.name }}",
-              "facts": [
-                {"name": "Branch", "value": "${{ github.ref_name }}"},
-                {"name": "Author", "value": "${{ github.event.head_commit.author.name }} (${{ github.event.head_commit.author.email }})"},
-                {"name": "Commit", "value": "${{ github.event.head_commit.message }}"},
-                {"name": "Files", "value": "${{ steps.files.outputs.list }}"}
+          COMMIT_MSG=$(echo '${{ steps.commits.outputs.messages }}' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          
+          curl -H "Content-Type: application/json" -d "{
+            \"@type\": \"MessageCard\",
+            \"@context\": \"http://schema.org/extensions\",
+            \"themeColor\": \"0076D7\",
+            \"summary\": \"Push to ${{ github.repository }}\",
+            \"sections\": [{
+              \"activityTitle\": \"Push to ${{ github.repository }}\",
+              \"activitySubtitle\": \"${{ github.event.pusher.name }}\",
+              \"facts\": [
+                {\"name\": \"Branch\", \"value\": \"${{ github.ref_name }}\"},
+                {\"name\": \"Author\", \"value\": \"${{ github.event.head_commit.author.name }}\"},
+                {\"name\": \"Commits\", \"value\": \"$COMMIT_MSG\"},
+                {\"name\": \"Added\", \"value\": \"${{ steps.files.outputs.added }}\"},
+                {\"name\": \"Modified\", \"value\": \"${{ steps.files.outputs.modified }}\"},
+                {\"name\": \"Deleted\", \"value\": \"${{ steps.files.outputs.deleted }}\"}
               ],
-              "markdown": true
+              \"markdown\": true
             }],
-            "potentialAction": [{
-              "@type": "OpenUri",
-              "name": "View Commit",
-              "targets": [{"os": "default", "uri": "${{ github.event.head_commit.url }}"}]
+            \"potentialAction\": [{
+              \"@type\": \"OpenUri\",
+              \"name\": \"View Commit\",
+              \"targets\": [{\"os\": \"default\", \"uri\": \"${{ github.event.head_commit.url }}\"}]
             }]
-          }' "$WEBHOOK_URL"
- 
+          }" "$WEBHOOK_URL"
