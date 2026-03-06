@@ -37,32 +37,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PROMPT=$(cat <<EOF
-         You are generating documentation for a Vue.js repository.
-          
-         Create a file called guide.md summarizing the project so an AI assistant
-         can answer questions without scanning the entire repository.
-          
-         Structure:
-          
-         # Project Guide
-         ## Overview
-         ## Application Structure
-         ## Menus and Features
-         ## Key Components
-         ## Routing Map
-         ## State Management
-         ## API Integrations
-         ## Important Workflows
-          
-         Changed files:
-         $(cat changed_files.txt)
-          
-         Repository files:
-         $(cat repo_files.txt)
-          
-         Produce a structured markdown document.
-         EOF
-         )
+          You are generating documentation for a Vue.js repository.
+           
+          Create a file called guide.md summarizing the project so an AI assistant
+          can answer questions without scanning the entire repository.
+           
+          Structure:
+           
+          # Project Guide
+          ## Overview
+          ## Application Structure
+          ## Menus and Features
+          ## Key Components
+          ## Routing Map
+          ## State Management
+          ## API Integrations
+          ## Important Workflows
+           
+          Changed files:
+          $(cat changed_files.txt)
+           
+          Repository files:
+          $(cat repo_files.txt)
+           
+          Produce a structured markdown document.
+          EOF
+          )
  
           gh copilot ask "$PROMPT" > guide.md
  
