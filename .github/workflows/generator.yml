@@ -7,9 +7,11 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
  
 jobs:
   generate-guide:
+    # prevent loops if bots commit
     if: |
       github.actor != 'github-actions[bot]' &&
       github.actor != 'github-copilot[bot]'
@@ -18,6 +20,8 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
  
       - name: Install GitHub CLI
         run: |
@@ -25,8 +29,9 @@ jobs:
           sudo apt install gh -y
  
       - name: Authenticate GitHub CLI
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+ 
+      - name: Verify authentication
         run: gh auth status
  
       - name: Generate PR diff
@@ -35,8 +40,6 @@ jobs:
           git diff origin/${{ github.base_ref }} > pr.diff
  
       - name: Run Copilot Coding Agent
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh agent-task create "
           Repository: ${{ github.repository }}
@@ -44,56 +47,61 @@ jobs:
           Pull Request: #${{ github.event.pull_request.number }}
  
           Context:
-          The repository is a Vue.js frontend application.
+          This repository is a Vue.js frontend application.
  
-          Goal:
-          Maintain a high-level documentation file called guide.md.
+          The repository contains pages, components, menus,
+          API calls and state management.
  
-          This file is used by an AI assistant to answer user questions
-          without reading the entire repository.
+          Purpose of this task:
+          Maintain a structured documentation file called guide.md.
  
-          Task:
-          1. Inspect the pull request changes.
-          2. Analyze the Vue pages, components, menus and options affected.
-          3. Update guide.md to reflect the changes.
+          guide.md is consumed by an AI assistant so it can answer
+          user questions about the application without scanning
+          the entire repository.
  
-          The guide.md must include:
+          Analyze the repository and the pull request diff.
+ 
+          File containing changes:
+          pr.diff
+ 
+          Update guide.md accordingly.
+ 
+          The guide must follow this structure:
  
           # Application Guide
  
           ## Overview
-          What the application does.
+          Short explanation of what the application does.
  
           ## Navigation / Menus
-          List all menus and routes.
+          List main menus and routes.
  
           ## Pages
           For each page include:
           - route
           - file path
           - purpose
-          - user actions
+          - user actions available
  
           ## Components
-          Important reusable components.
+          Important reusable components and where they are used.
  
-          ## API interactions
-          Which endpoints are used.
+          ## API Interactions
+          Which endpoints are used and by which pages.
  
-          ## Stores / state
-          Vuex or Pinia stores.
+          ## Stores / State
+          Vuex or Pinia stores and what they manage.
  
           Rules:
-          - clear markdown headings
-          - concise explanations
-          - no code blocks
-          - include file paths
-          - keep it AI-readable
+          - Use clear markdown headings
+          - Include file paths
+          - Do NOT include code blocks
+          - Keep explanations concise
+          - Optimize for AI readability
+          - Update existing guide.md if it exists
  
-          If guide.md exists:
-          update it instead of rewriting blindly.
+          Commit the updated guide.md to the pull request branch.
  
-          Commit changes directly to the pull request branch.
- 
-          If no documentation update is needed, do nothing.
+          If the pull request does not affect documentation,
+          do nothing.
           "
