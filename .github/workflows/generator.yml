@@ -64,7 +64,7 @@ jobs:
           EOF
           )
  
-          gh copilot ask "$PROMPT" > guide.md
+          gh copilot ask -p "$PROMPT" > guide.md
  
       - name: Commit guide.md
         run: |
