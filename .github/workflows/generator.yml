@@ -1,77 +1,206 @@
-name: Update Guide.md
- 
+name: Update Guide.md from PR Diff
+
 on:
   pull_request:
-    types: [opened, synchronize]
- 
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   update-guide:
     runs-on: ubuntu-latest
- 
-    permissions:
-      contents: write
-      pull-requests: write
- 
+
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
- 
-      - name: Install GitHub CLI
+
+      - name: Setup Node (for Copilot CLI install)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install GitHub Copilot CLI
         run: |
-          sudo apt update
-          sudo apt install gh -y
- 
-      - name: Get changed files
+          npm -g install @github/copilot
+          copilot --version
+
+      - name: Compute PR diff vs base
+        id: diff
         run: |
-          git fetch origin ${{ github.base_ref }}
-          git diff --name-only origin/${{ github.base_ref }} > changed_files.txt
- 
-      - name: Collect repository structure
+          # Determine a good base to diff against
+          git fetch origin ${{ github.base_ref }} --depth=1 || true
+          if git rev-parse --verify origin/${{ github.base_ref }} >/dev/null 2>&1; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            DEFAULT_BRANCH=$(git remote show origin | awk '/HEAD branch/ {print $NF}')
+            BASE="origin/${DEFAULT_BRANCH}"
+            git fetch origin "$DEFAULT_BRANCH" --depth=1 || true
+          fi
+
+          # File list and status
+          git diff --name-only "$BASE"...HEAD > changed_files.txt || true
+          git diff --name-status "$BASE"...HEAD > changed_status.txt || true
+
+          # Full textual diff (unified context for semantics)
+          git diff "$BASE"...HEAD --unified=3 > pr.diff || true
+
+          echo "Changed files:"
+          cat changed_files.txt || true
+
+      - name: Create auxiliary context (repo snapshot lists)
         run: |
-          find src -type f > repo_files.txt || echo "No src folder"
- 
-      - name: Generate guide.md with Copilot
+          # Lightweight snapshot of app files to help context (no contents; just paths)
+          { find src -type f -name '*.vue'; find src -type f -name '*.ts' -o -name '*.js' | head -n 500; } \
+            2>/dev/null | sed 's/^/FILE: /' | head -n 2000 > repo_snapshot.txt || true
+
+      - name: Truncate large inputs
+        run: |
+          # Cap very large diffs to keep prompts within model limits
+          MAX_LINES=4000
+          if [ -f pr.diff ]; then
+            wc -l pr.diff
+            head -n $MAX_LINES pr.diff > pr_truncated.diff
+            TOTAL=$(wc -l < pr.diff || echo 0)
+            if [ "$TOTAL" -gt "$MAX_LINES" ]; then
+              echo "" >> pr_truncated.diff
+              echo "[TRUNCATED] Showing first $MAX_LINES of $TOTAL diff lines." >> pr_truncated.diff
+            fi
+          else
+            : > pr_truncated.diff
+          fi
+
+          # Include existing guide.md (truncated) so agent can edit/remove statements precisely
+          if [ -f guide.md ]; then
+            head -c 60000 guide.md > existing_guide_snippet.md
+            [ $(wc -c < existing_guide_snippet.md) -lt $(wc -c < guide.md) ] && \
+              echo -e "\n\n[TRUNCATED EXISTING GUIDE]" >> existing_guide_snippet.md
+          else
+            : > existing_guide_snippet.md
+          fi
+
+          # Also cap repo snapshot
+          head -n 1200 repo_snapshot.txt > repo_snapshot_small.txt || true
+          [ -f repo_snapshot.txt ] && \
+            if [ $(wc -l < repo_snapshot.txt) -gt 1200 ]; then
+              echo "[TRUNCATED] Snapshot limited to 1200 paths." >> repo_snapshot_small.txt
+            fi
+
+      - name: Build prompt for Copilot CLI
+        run: |
+          CHANGED=$(cat changed_files.txt 2>/dev/null || echo "")
+          DIFF=$(cat pr_truncated.diff 2>/dev/null || echo "")
+          SNAPSHOT=$(cat repo_snapshot_small.txt 2>/dev/null || echo "")
+          EXISTING=$(cat existing_guide_snippet.md 2>/dev/null || echo "")
+
+          TODAY=$(date +%Y-%m-%d)
+
+          cat > prompt.txt <<EOF
+You are a documentation agent for a Vue.js repository.
+
+Goal:
+Update (or create) guide.md so an external AI agent can quickly answer user questions about the app.
+Update the guide **based on the PR diff content** (features added/removed/renamed), not just folder changes.
+
+Key rule:
+- If a feature or capability is removed or moved (e.g., removing ordering from a page), **remove or update any statements** in guide.md that claim that capability.
+- If changes are purely internal logic that don't affect observable behavior or UI tasks, **do not** change those parts.
+
+Required structure (keep stable; no change logs):
+---
+title: Project Guide
+version: 1.0
+last_updated: ${TODAY}
+navigation:
+  - overview
+  - application-structure
+  - routing-map
+  - tasks-and-faqs
+  - state-management
+  - api-integrations
+  - important-workflows
+---
+
+# Project Guide
+
+> **Purpose:** A quick reference for agents and humans. Prefer concise, task-focused summaries.
+> **Scope:** Structure (routes/pages/components), high-level behaviors, and step-by-step task recipes.
+
+## Overview
+- One-liner purpose, primary domains, tech stack.
+
+## Application Structure
+- Layouts (brief roles), Views/Pages (bulleted one-liners), Reusable components (high-signal only).
+
+## Routing Map
+- For each route: path → page name — short description (include name/path/component if known).
+
+## Tasks & FAQs (Agent Quick Answers)
+- Short, deterministic steps using UI labels and menu names.
+- MUST include (if still true after this PR):
+### How do I download adjustments?
+Path: Menu → Adjustments → Download
+Steps to reach /adjustments, set filters/date range, click Download, select CSV/XLSX, receive the file.
+Notes brief; related files/services if applicable.
+- If the diff indicates this feature changed or was removed, update/remove this recipe accordingly.
+
+## Key Components
+- Only the most relevant components; one-line purpose each.
+
+## State Management
+- Pinia/Vuex stores/modules with brief roles.
+
+## API Integrations
+- Public surfaces/endpoints used by the UI (name, path, purpose).
+
+## Important Workflows
+- Summaries of key user flows; update only if behavior changed.
+
+Constraints:
+- Be minimally invasive: edit only sections affected by the diff.
+- Prefer UI-visible behavior over internal function names.
+- If diffs are inconclusive, default to **no change** to avoid churn.
+- Output ONLY the final Markdown to write to guide.md.
+
+---
+Changed files:
+$CHANGED
+
+PR Diff (truncated if large):
+$DIFF
+
+Repo snapshot (paths only; truncated):
+$SNAPSHOT
+
+Existing guide.md (truncated):
+$EXISTING
+EOF
+
+          echo "---- PROMPT PREVIEW (first 120 lines) ----"
+          head -n 120 prompt.txt || true
+          echo "-----------------------------------------"
+
+      - name: Generate/Update guide.md via Copilot CLI
         env:
-          GH_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         run: |
-          PROMPT=$(cat <<EOF
-          You are generating documentation for a Vue.js repository.
-           
-          Create a file called guide.md summarizing the project so an AI assistant
-          can answer questions without scanning the entire repository.
-           
-          Structure:
-           
-          # Project Guide
-          ## Overview
-          ## Application Structure
-          ## Menus and Features
-          ## Key Components
-          ## Routing Map
-          ## State Management
-          ## API Integrations
-          ## Important Workflows
-           
-          Changed files:
-          $(cat changed_files.txt)
-           
-          Repository files:
-          $(cat repo_files.txt)
-           
-          Produce a structured markdown document.
-          EOF
-          )
- 
-          gh copilot ask -p "$PROMPT" > guide.md
- 
-      - name: Commit guide.md
+          copilot -sp "$(cat prompt.txt)" > guide.md
+
+      - name: Commit guide.md if changed and push to the PR branch
+        env:
+          GIT_AUTHOR_NAME: guide-bot
+          GIT_AUTHOR_EMAIL: guide-bot@users.noreply.github.com
+          GIT_COMMITTER_NAME: guide-bot
+          GIT_COMMITTER_EMAIL: guide-bot@users.noreply.github.com
         run: |
-          git config user.name "guide-bot"
-          git config user.email "guide-bot@github.com"
- 
           git add guide.md
-          git commit -m "Auto-update guide.md based on PR changes" || echo "No changes"
- 
-          git push origin HEAD:${{ github.head_ref }}
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto-update guide.md based on PR diff"
+            # Push back to the same PR head branch
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            echo "No changes to guide.md"
+          fi
