@@ -1,0 +1,99 @@
+name: Copilot Guide Generator
+ 
+on:
+  pull_request:
+    types: [opened, synchronize]
+ 
+permissions:
+  contents: write
+  pull-requests: write
+ 
+jobs:
+  generate-guide:
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'github-copilot[bot]'
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+ 
+      - name: Install GitHub CLI
+        run: |
+          sudo apt update
+          sudo apt install gh -y
+ 
+      - name: Authenticate GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh auth status
+ 
+      - name: Generate PR diff
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git diff origin/${{ github.base_ref }} > pr.diff
+ 
+      - name: Run Copilot Coding Agent
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh agent-task create "
+          Repository: ${{ github.repository }}
+ 
+          Pull Request: #${{ github.event.pull_request.number }}
+ 
+          Context:
+          The repository is a Vue.js frontend application.
+ 
+          Goal:
+          Maintain a high-level documentation file called guide.md.
+ 
+          This file is used by an AI assistant to answer user questions
+          without reading the entire repository.
+ 
+          Task:
+          1. Inspect the pull request changes.
+          2. Analyze the Vue pages, components, menus and options affected.
+          3. Update guide.md to reflect the changes.
+ 
+          The guide.md must include:
+ 
+          # Application Guide
+ 
+          ## Overview
+          What the application does.
+ 
+          ## Navigation / Menus
+          List all menus and routes.
+ 
+          ## Pages
+          For each page include:
+          - route
+          - file path
+          - purpose
+          - user actions
+ 
+          ## Components
+          Important reusable components.
+ 
+          ## API interactions
+          Which endpoints are used.
+ 
+          ## Stores / state
+          Vuex or Pinia stores.
+ 
+          Rules:
+          - clear markdown headings
+          - concise explanations
+          - no code blocks
+          - include file paths
+          - keep it AI-readable
+ 
+          If guide.md exists:
+          update it instead of rewriting blindly.
+ 
+          Commit changes directly to the pull request branch.
+ 
+          If no documentation update is needed, do nothing.
+          "
