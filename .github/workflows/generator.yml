@@ -99,85 +99,85 @@ jobs:
           TODAY=$(date +%Y-%m-%d)
 
           cat > prompt.txt <<EOF
-You are a documentation agent for a Vue.js repository.
+          You are a documentation agent for a Vue.js repository.
+          
+          Goal:
+          Update (or create) guide.md so an external AI agent can quickly answer user questions about the app.
+          Update the guide **based on the PR diff content** (features added/removed/renamed), not just folder changes.
+          
+          Key rule:
+          - If a feature or capability is removed or moved (e.g., removing ordering from a page), **remove or update any statements** in guide.md that claim that capability.
+          - If changes are purely internal logic that don't affect observable behavior or UI tasks, **do not** change those parts.
+          
+          Required structure (keep stable; no change logs):
+          ---
+          title: Project Guide
+          version: 1.0
+          last_updated: ${TODAY}
+          navigation:
+            - overview
+            - application-structure
+            - routing-map
+            - tasks-and-faqs
+            - state-management
+            - api-integrations
+            - important-workflows
+          ---
 
-Goal:
-Update (or create) guide.md so an external AI agent can quickly answer user questions about the app.
-Update the guide **based on the PR diff content** (features added/removed/renamed), not just folder changes.
-
-Key rule:
-- If a feature or capability is removed or moved (e.g., removing ordering from a page), **remove or update any statements** in guide.md that claim that capability.
-- If changes are purely internal logic that don't affect observable behavior or UI tasks, **do not** change those parts.
-
-Required structure (keep stable; no change logs):
----
-title: Project Guide
-version: 1.0
-last_updated: ${TODAY}
-navigation:
-  - overview
-  - application-structure
-  - routing-map
-  - tasks-and-faqs
-  - state-management
-  - api-integrations
-  - important-workflows
----
-
-# Project Guide
-
-> **Purpose:** A quick reference for agents and humans. Prefer concise, task-focused summaries.
-> **Scope:** Structure (routes/pages/components), high-level behaviors, and step-by-step task recipes.
-
-## Overview
-- One-liner purpose, primary domains, tech stack.
-
-## Application Structure
-- Layouts (brief roles), Views/Pages (bulleted one-liners), Reusable components (high-signal only).
-
-## Routing Map
-- For each route: path → page name — short description (include name/path/component if known).
-
-## Tasks & FAQs (Agent Quick Answers)
-- Short, deterministic steps using UI labels and menu names.
-- MUST include (if still true after this PR):
-### How do I download adjustments?
-Path: Menu → Adjustments → Download
-Steps to reach /adjustments, set filters/date range, click Download, select CSV/XLSX, receive the file.
-Notes brief; related files/services if applicable.
-- If the diff indicates this feature changed or was removed, update/remove this recipe accordingly.
-
-## Key Components
-- Only the most relevant components; one-line purpose each.
-
-## State Management
-- Pinia/Vuex stores/modules with brief roles.
-
-## API Integrations
-- Public surfaces/endpoints used by the UI (name, path, purpose).
-
-## Important Workflows
-- Summaries of key user flows; update only if behavior changed.
-
-Constraints:
-- Be minimally invasive: edit only sections affected by the diff.
-- Prefer UI-visible behavior over internal function names.
-- If diffs are inconclusive, default to **no change** to avoid churn.
-- Output ONLY the final Markdown to write to guide.md.
-
----
-Changed files:
-$CHANGED
-
-PR Diff (truncated if large):
-$DIFF
-
-Repo snapshot (paths only; truncated):
-$SNAPSHOT
-
-Existing guide.md (truncated):
-$EXISTING
-EOF
+          # Project Guide
+          
+          > **Purpose:** A quick reference for agents and humans. Prefer concise, task-focused summaries.
+          > **Scope:** Structure (routes/pages/components), high-level behaviors, and step-by-step task recipes.
+          
+          ## Overview
+          - One-liner purpose, primary domains, tech stack.
+          
+          ## Application Structure
+          - Layouts (brief roles), Views/Pages (bulleted one-liners), Reusable components (high-signal only).
+          
+          ## Routing Map
+          - For each route: path → page name — short description (include name/path/component if known).
+          
+          ## Tasks & FAQs (Agent Quick Answers)
+          - Short, deterministic steps using UI labels and menu names.
+          - MUST include (if still true after this PR):
+          ### How do I download adjustments?
+          Path: Menu → Adjustments → Download
+          Steps to reach /adjustments, set filters/date range, click Download, select CSV/XLSX, receive the file.
+          Notes brief; related files/services if applicable.
+          - If the diff indicates this feature changed or was removed, update/remove this recipe accordingly.
+          
+          ## Key Components
+          - Only the most relevant components; one-line purpose each.
+          
+          ## State Management
+          - Pinia/Vuex stores/modules with brief roles.
+          
+          ## API Integrations
+          - Public surfaces/endpoints used by the UI (name, path, purpose).
+          
+          ## Important Workflows
+          - Summaries of key user flows; update only if behavior changed.
+          
+          Constraints:
+          - Be minimally invasive: edit only sections affected by the diff.
+          - Prefer UI-visible behavior over internal function names.
+          - If diffs are inconclusive, default to **no change** to avoid churn.
+          - Output ONLY the final Markdown to write to guide.md.
+          
+          ---
+          Changed files:
+          $CHANGED
+          
+          PR Diff (truncated if large):
+          $DIFF
+          
+          Repo snapshot (paths only; truncated):
+          $SNAPSHOT
+          
+          Existing guide.md (truncated):
+          $EXISTING
+          EOF
 
           echo "---- PROMPT PREVIEW (first 120 lines) ----"
           head -n 120 prompt.txt || true
