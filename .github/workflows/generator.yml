@@ -1,8 +1,5 @@
 name: Update Guide.md from PR Diff
 
-env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
 
 on:
   pull_request:
@@ -189,7 +186,7 @@ jobs:
 
       - name: Generate/Update guide.md via Copilot CLI
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           copilot -sp "$(cat prompt.txt)" > guide.md
 
