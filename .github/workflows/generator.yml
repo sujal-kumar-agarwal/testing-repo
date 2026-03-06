@@ -1,5 +1,9 @@
 name: Update Guide.md from PR Diff
 
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
