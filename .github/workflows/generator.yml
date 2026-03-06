@@ -1,107 +1,98 @@
-name: Copilot Guide Generator
+name: Update Guide.md
  
 on:
   pull_request:
     types: [opened, synchronize]
  
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
- 
 jobs:
-  generate-guide:
-    # prevent loops if bots commit
-    if: |
-      github.actor != 'github-actions[bot]' &&
-      github.actor != 'github-copilot[bot]'
+  update-guide:
     runs-on: ubuntu-latest
  
+    permissions:
+      contents: write
+      pull-requests: write
+ 
     steps:
-      - name: Checkout PR branch
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          fetch-depth: 0
  
       - name: Install GitHub CLI
         run: |
           sudo apt update
           sudo apt install gh -y
  
-      - name: Authenticate GitHub CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
+      - name: Install Copilot CLI extension
+        run: |
+          gh extension install github/gh-copilot
  
-      - name: Verify authentication
-        run: gh auth status
+      - name: Authenticate GH CLI
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
  
-      - name: Generate PR diff
+      - name: Get changed files
         run: |
           git fetch origin ${{ github.base_ref }}
-          git diff origin/${{ github.base_ref }} > pr.diff
+          git diff --name-only origin/${{ github.base_ref }} > changed_files.txt
  
-      - name: Run Copilot Coding Agent
+      - name: Collect repository structure
         run: |
-          gh agent-task create "
-          Repository: ${{ github.repository }}
+          find src -type f > repo_files.txt || echo "No src folder"
  
-          Pull Request: #${{ github.event.pull_request.number }}
- 
-          Context:
-          This repository is a Vue.js frontend application.
- 
-          The repository contains pages, components, menus,
-          API calls and state management.
- 
-          Purpose of this task:
-          Maintain a structured documentation file called guide.md.
- 
-          guide.md is consumed by an AI assistant so it can answer
-          user questions about the application without scanning
-          the entire repository.
- 
-          Analyze the repository and the pull request diff.
- 
-          File containing changes:
-          pr.diff
- 
-          Update guide.md accordingly.
- 
-          The guide must follow this structure:
- 
-          # Application Guide
- 
+      - name: Generate guide.md with Copilot
+        run: |
+          PROMPT=$(cat <<EOF
+          You are generating documentation for a Vue.js repository.
+          Create a file called guide.md summarizing the project so an AI agent
+          can answer questions without scanning the whole repository.
+           
+          Use this structure:
+           
+          # Project Guide
+           
           ## Overview
-          Short explanation of what the application does.
+          Explain the purpose of the application.
+           
+          ## Application Structure
+          Describe folders and architecture.
+           
+          ## Menus and Features
+          Explain main UI sections and what they do.
+           
+          ## Key Components
+          Important Vue components and their purpose.
+           
+          ## Routing Map
+          Main routes and pages.
+           
+          ## State Management
+          Vuex or Pinia stores.
+           
+          ## API Integrations
+          External APIs used.
+           
+          ## Important Workflows
+          Key user flows.
+           
+          Changed files in this PR:
+          $(cat changed_files.txt)
+           
+          Repository files:
+          $(cat repo_files.txt)
+           
+          Produce a clear structured markdown document.
+          EOF
+          )
  
-          ## Navigation / Menus
-          List main menus and routes.
+          gh copilot ask "$PROMPT" > guide.md
  
-          ## Pages
-          For each page include:
-          - route
-          - file path
-          - purpose
-          - user actions available
+      - name: Commit guide.md
+        run: |
+          git config user.name "guide-bot"
+          git config user.email "guide-bot@github.com"
  
-          ## Components
-          Important reusable components and where they are used.
+          git add guide.md
+          git commit -m "Auto-update guide.md based on PR changes" || echo "No changes"
  
-          ## API Interactions
-          Which endpoints are used and by which pages.
- 
-          ## Stores / State
-          Vuex or Pinia stores and what they manage.
- 
-          Rules:
-          - Use clear markdown headings
-          - Include file paths
-          - Do NOT include code blocks
-          - Keep explanations concise
-          - Optimize for AI readability
-          - Update existing guide.md if it exists
- 
-          Commit the updated guide.md to the pull request branch.
- 
-          If the pull request does not affect documentation,
-          do nothing.
-          "
+          git push origin HEAD:${{ github.head_ref }}
